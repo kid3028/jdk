@@ -25,24 +25,27 @@
 
 package java.lang;
 
-import java.lang.ref.Reference;
-import java.lang.ref.ReferenceQueue;
-import java.lang.ref.WeakReference;
-import java.security.AccessController;
-import java.security.AccessControlContext;
-import java.security.PrivilegedAction;
-import java.util.Map;
-import java.util.HashMap;
-import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.ConcurrentMap;
-import java.util.concurrent.locks.LockSupport;
 import sun.nio.ch.Interruptible;
 import sun.reflect.CallerSensitive;
 import sun.reflect.Reflection;
 import sun.security.util.SecurityConstants;
 
+import java.lang.ref.Reference;
+import java.lang.ref.ReferenceQueue;
+import java.lang.ref.WeakReference;
+import java.security.AccessControlContext;
+import java.security.AccessController;
+import java.security.PrivilegedAction;
+import java.util.HashMap;
+import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ConcurrentMap;
+import java.util.concurrent.locks.LockSupport;
+
 
 /**
+ * 每个线程都有自己的优先级，如果是在线程(母线程)内创建了新的线程(子线程)，
+ * 那么子线程的初始优先级和母线程相同，如果母线程是守护线程，那么子线程也是守护线程
  * A <i>thread</i> is a thread of execution in a program. The Java
  * Virtual Machine allows an application to have multiple threads of
  * execution running concurrently.
@@ -282,6 +285,8 @@ class Thread implements Runnable {
     public static native void yield();
 
     /**
+     * sleep(long millis)是一个native方法，使用其他语言实现的，
+     * 因为java没法和硬件底层打交道，只能委托给其他语言来实现
      * Causes the currently executing thread to sleep (temporarily cease
      * execution) for the specified number of milliseconds, subject to
      * the precision and accuracy of system timers and schedulers. The thread
@@ -301,6 +306,7 @@ class Thread implements Runnable {
     public static native void sleep(long millis) throws InterruptedException;
 
     /**
+     * sleep方法中，nanos参数并没有用到，也就是说，sleep只能精确到毫秒级别
      * Causes the currently executing thread to sleep (temporarily cease
      * execution) for the specified number of milliseconds plus the specified
      * number of nanoseconds, subject to the precision and accuracy of system
@@ -679,6 +685,7 @@ class Thread implements Runnable {
     }
 
     /**
+     * start()方法主要是调用了start0()，start0()方法是一个native方法
      * Causes this thread to begin execution; the Java Virtual Machine
      * calls the <code>run</code> method of this thread.
      * <p>
@@ -687,6 +694,8 @@ class Thread implements Runnable {
      * <code>start</code> method) and the other thread (which executes its
      * <code>run</code> method).
      * <p>
+     * 对一个线程多次调用start方法是非法的，一个线程一旦执行完毕是不会再重新启动，
+     * 如果多次调用将会抛出IllegalThreadStateException异常
      * It is never legal to start a thread more than once.
      * In particular, a thread may not be restarted once it has completed
      * execution.
@@ -731,6 +740,12 @@ class Thread implements Runnable {
     private native void start0();
 
     /**
+     * Thread类实现了Runnable接口，因此在Thread中重写了run方法，
+     * 在run方法中，如果target存在，则执行target的run方法，
+     * 否则什么也不做。
+     * target即Thread构造函数中传入的Runable对象
+     * Thread.run() -> target.run()
+     *
      * If this thread was constructed using a separate
      * <code>Runnable</code> run object, then that
      * <code>Runnable</code> object's <code>run</code> method is called;
@@ -1218,6 +1233,8 @@ class Thread implements Runnable {
     public native int countStackFrames();
 
     /**
+     * 告诉外部线程最多等待我millis毫秒
+     * 如果是0millis代表永远等待
      * Waits at most {@code millis} milliseconds for this thread to
      * die. A timeout of {@code 0} means to wait forever.
      *
@@ -1247,6 +1264,14 @@ class Thread implements Runnable {
             throw new IllegalArgumentException("timeout value is negative");
         }
 
+        /**
+         * 外部线程，例如main
+         * 当外部线程调用t.join的时候，外部线程会获得线程对象t的锁，wait意味着拿到了该对象的锁，
+         * 调用该对象的wait，直到该对象唤醒ma外部线程，比如子线程退出
+         * 换句话说，外部线程线程调用t.join()时，必须要拿到线程t对象的锁， 如果拿不到的话，那么
+         * 它是无法wait的，t.join(1000)并不是说外部线程等待1000millis，如果在外部线程等待之前，
+         * 其他线程获得了t对象的锁，它等待的时间就不是1000millis了。
+         */
         if (millis == 0) {
             while (isAlive()) {
                 wait(0);
@@ -1264,6 +1289,7 @@ class Thread implements Runnable {
     }
 
     /**
+     * 告诉外部线程最多等待我millis毫秒
      * Waits at most {@code millis} milliseconds plus
      * {@code nanos} nanoseconds for this thread to die.
      *
