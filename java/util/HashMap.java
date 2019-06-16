@@ -135,6 +135,37 @@ import sun.misc.SharedSecrets;
  * @see     Hashtable
  * @since   1.2
  */
+
+/**
+ * AbstractMap已经实现了Map接口，为什么HashMap既继承了AbstractMap抽象类，又实现了Map接口？
+ *    从功能上说，HashMap实现Map接口是没有任何作用的。
+ *    从结构上来说，由于一般是面向接口编程，为了维护结构清晰和完整，是需要实现Map接口的，
+ *    而AbstractMap提供了Map接口的实现，最大限度减少实现Map接口所需要的工作
+ *
+ * HashMap与Hashtable的区别
+ * 1.继承类不一样
+ *    HashMap继承的是AbstractMap，Hashtable继承的是Dictionary。
+ *    实现的接口一致(Map、Clonable、Serializable)
+ * 2.初始容量不一样
+ *    HashMap默认容量为16，且容量只能是2的幂次方；Hashtable默认容量为11，容量并没有2的幂次方的限制，
+ *    增加的方式是oldCapacity * 2 + 1
+ * 3.HashMap是线程不安全的，Hashtable是线程安全的
+ *    默认情况下，HashMap中的方法没有进行同步，而Hashtable中的方法均采用synchronized进行了同步，
+ *    因此在多线程并发的情况下， Hashtable可以直接使用，HashMap需要加入额外的同步操作。
+ * 4.使用的hashcode不一样
+ *    Hashtable是直接使用key的hashcode（直接调用object.hashcode()），
+ *    HashMap的key的使用了独立的hash算法，并且算法是通过key多次计算出来的，减少了hash碰撞
+ * 5.HashMap允许有一个key为null，多个value为null，Hashtable不允许key和value为null
+ * 6.HashMap和Hashtable内部遍历方式的实现不一样
+ *    Hashtable、HashMap都使用了Iterator，Hashtable中还使用Enumeration的方式
+ *
+ *
+ *
+ *
+ *
+ * @param <K>
+ * @param <V>
+ */
 public class HashMap<K,V> extends AbstractMap<K,V>
     implements Map<K,V>, Cloneable, Serializable {
 
@@ -373,6 +404,7 @@ public class HashMap<K,V> extends AbstractMap<K,V>
     }
 
     /**
+     * 将输入到的任意值转化为大于等于此值的2的幂次方
      * Returns a power of two size for the given target capacity.
      */
     static final int tableSizeFor(int cap) {
@@ -436,11 +468,12 @@ public class HashMap<K,V> extends AbstractMap<K,V>
     /* ---------------- Public operations -------------- */
 
     /**
+     * HashMap并没有像Hashtable一样在构造函数中对table进行空间分配，而是在第一次调用put的时候进行
      * Constructs an empty <tt>HashMap</tt> with the specified initial
      * capacity and load factor.
      *
-     * @param  initialCapacity the initial capacity
-     * @param  loadFactor      the load factor
+     * @param  initialCapacity the initial capacity 分配数组的大小，默认16，且只能是2的幂次方
+     * @param  loadFactor      the load factor 负载因子，作用：当数组中存储的数据大于分配空间的总长度 * loadFactor之后进行扩容
      * @throws IllegalArgumentException if the initial capacity is negative
      *         or the load factor is nonpositive
      */
@@ -491,6 +524,10 @@ public class HashMap<K,V> extends AbstractMap<K,V>
     }
 
     /**
+     * 首先对table进行检查
+     * 如果table为null，则计算出threshold，为第一次调用putVal方法时table分配空间
+     * 如果table不为null，检查是否需要扩容
+     * 最后将需要添加的数据集合借助putVal()方法加入到数组table中
      * Implements Map.putAll and Map constructor.
      *
      * @param m the map
@@ -500,6 +537,7 @@ public class HashMap<K,V> extends AbstractMap<K,V>
     final void putMapEntries(Map<? extends K, ? extends V> m, boolean evict) {
         int s = m.size();
         if (s > 0) {
+            // table为空，计算出threshold
             if (table == null) { // pre-size
                 float ft = ((float)s / loadFactor) + 1.0F;
                 int t = ((ft < (float)MAXIMUM_CAPACITY) ?
@@ -507,8 +545,10 @@ public class HashMap<K,V> extends AbstractMap<K,V>
                 if (t > threshold)
                     threshold = tableSizeFor(t);
             }
+            // table不空，需要添加的元素个数大于threshold，进行扩容
             else if (s > threshold)
                 resize();
+            // 遍历将每一个元素添加到map中
             for (Map.Entry<? extends K, ? extends V> e : m.entrySet()) {
                 K key = e.getKey();
                 V value = e.getValue();
@@ -558,6 +598,8 @@ public class HashMap<K,V> extends AbstractMap<K,V>
     }
 
     /**
+     * 首先根据key得到hashcode，然后根据hashcode得到该key在数组table的存储位置，
+     * 接着在该位置寻找key值和hashcode值一致的节点，如果没有找到，返回null
      * Implements Map.get and related methods.
      *
      * @param hash hash for key
@@ -585,6 +627,7 @@ public class HashMap<K,V> extends AbstractMap<K,V>
     }
 
     /**
+     * 是否存在key
      * Returns <tt>true</tt> if this map contains a mapping for the
      * specified key.
      *
@@ -593,6 +636,7 @@ public class HashMap<K,V> extends AbstractMap<K,V>
      * key.
      */
     public boolean containsKey(Object key) {
+        // 根据key去获取元素，如果结果不为空，说明存在key
         return getNode(hash(key), key) != null;
     }
 
@@ -625,17 +669,28 @@ public class HashMap<K,V> extends AbstractMap<K,V>
     final V putVal(int hash, K key, V value, boolean onlyIfAbsent,
                    boolean evict) {
         Node<K,V>[] tab; Node<K,V> p; int n, i;
+        // 如果table为空
         if ((tab = table) == null || (n = tab.length) == 0)
+            // 重新开辟一个Node<K,V>数组
             n = (tab = resize()).length;
-        if ((p = tab[i = (n - 1) & hash]) == null)
+        // 根据key的hash值找到要存储的位置，如果该位置没有存储元素，则直接在该位置保存值
+        if ((p = tab[i = (n - 1) & hash]) == null) {
             tab[i] = newNode(hash, key, value, null);
+        }
         else {
             Node<K,V> e; K k;
+            /**
+             * 检查在位置的的链表中是否有该key，先检查头结点是否为key，如果不等于，
+             * 则在剩余结点中选择
+             */
+            // key存在
             if (p.hash == hash &&
                 ((k = p.key) == key || (key != null && key.equals(k))))
                 e = p;
+            // p是treeMap
             else if (p instanceof TreeNode)
                 e = ((TreeNode<K,V>)p).putTreeVal(this, tab, hash, key, value);
+            // 在剩余的节点中寻找key的位置，将节点(key, value)添加到链表末尾
             else {
                 for (int binCount = 0; ; ++binCount) {
                     if ((e = p.next) == null) {
@@ -650,6 +705,7 @@ public class HashMap<K,V> extends AbstractMap<K,V>
                     p = e;
                 }
             }
+            // 如果e为空，则说明是添加的新节点，如果e不为空，则说明key已经存在，只要更新value
             if (e != null) { // existing mapping for key
                 V oldValue = e.value;
                 if (!onlyIfAbsent || oldValue == null)
@@ -659,6 +715,7 @@ public class HashMap<K,V> extends AbstractMap<K,V>
             }
         }
         ++modCount;
+        // 检查是否需要扩容
         if (++size > threshold)
             resize();
         afterNodeInsertion(evict);
@@ -679,6 +736,7 @@ public class HashMap<K,V> extends AbstractMap<K,V>
         int oldCap = (oldTab == null) ? 0 : oldTab.length;
         int oldThr = threshold;
         int newCap, newThr = 0;
+        // 如果数组table有长度，即不是第一次使用，则会进行扩容处理
         if (oldCap > 0) {
             if (oldCap >= MAXIMUM_CAPACITY) {
                 threshold = Integer.MAX_VALUE;
@@ -688,6 +746,8 @@ public class HashMap<K,V> extends AbstractMap<K,V>
                      oldCap >= DEFAULT_INITIAL_CAPACITY)
                 newThr = oldThr << 1; // double threshold
         }
+        // table第一次使用
+        // 指定了threshold，与使用哪个构造函数构造hashMap有关
         else if (oldThr > 0) // initial capacity was placed in threshold
             newCap = oldThr;
         else {               // zero initial threshold signifies using defaults
@@ -703,6 +763,7 @@ public class HashMap<K,V> extends AbstractMap<K,V>
         @SuppressWarnings({"rawtypes","unchecked"})
         Node<K,V>[] newTab = (Node<K,V>[])new Node[newCap];
         table = newTab;
+        // 进行拷贝
         if (oldTab != null) {
             for (int j = 0; j < oldCap; ++j) {
                 Node<K,V> e;
@@ -786,6 +847,7 @@ public class HashMap<K,V> extends AbstractMap<K,V>
     }
 
     /**
+     * 移除指定key
      * Removes the mapping for the specified key from this map if present.
      *
      * @param  key key whose mapping is to be removed from the map
@@ -796,11 +858,15 @@ public class HashMap<K,V> extends AbstractMap<K,V>
      */
     public V remove(Object key) {
         Node<K,V> e;
+        // 直接调用removeNode
         return (e = removeNode(hash(key), key, null, false, true)) == null ?
             null : e.value;
     }
 
     /**
+     * 移除key
+     * 先根据key的hash值找到table的位置index，然后在该位置下到的链表寻找
+     * key和hash均满足条件到的节点，进行删除
      * Implements Map.remove and related methods.
      *
      * @param hash hash for key
@@ -813,9 +879,11 @@ public class HashMap<K,V> extends AbstractMap<K,V>
     final Node<K,V> removeNode(int hash, Object key, Object value,
                                boolean matchValue, boolean movable) {
         Node<K,V>[] tab; Node<K,V> p; int n, index;
+        // table不空，找到hashkey对应的index，index位置的第一个node
         if ((tab = table) != null && (n = tab.length) > 0 &&
             (p = tab[index = (n - 1) & hash]) != null) {
             Node<K,V> node = null, e; K k; V v;
+            // node的hash、key均相等
             if (p.hash == hash &&
                 ((k = p.key) == key || (key != null && key.equals(k))))
                 node = p;
@@ -823,6 +891,7 @@ public class HashMap<K,V> extends AbstractMap<K,V>
                 if (p instanceof TreeNode)
                     node = ((TreeNode<K,V>)p).getTreeNode(hash, key);
                 else {
+                    // 变量链表，查找对应的node
                     do {
                         if (e.hash == hash &&
                             ((k = e.key) == key ||
@@ -834,6 +903,7 @@ public class HashMap<K,V> extends AbstractMap<K,V>
                     } while ((e = e.next) != null);
                 }
             }
+            // 找到，移除
             if (node != null && (!matchValue || (v = node.value) == value ||
                                  (value != null && value.equals(v)))) {
                 if (node instanceof TreeNode)
