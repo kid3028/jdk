@@ -128,21 +128,32 @@ import sun.misc.SharedSecrets;
  * @see     TreeMap
  * @since JDK1.0
  */
+
+/**
+ * 基于数据和链表实现的
+ * Hashtable继承了Dictionary， HashMap继承了AbstractMap
+ * @param <K>
+ * @param <V>
+ */
 public class Hashtable<K,V>
     extends Dictionary<K,V>
     implements Map<K,V>, Cloneable, java.io.Serializable {
 
     /**
+     * 存储hash表，即hashtable借助的数组，默认大小11.
+     * Hashtable，默认大小是11，HashMap默认大小是16，且扩容大小必须是2的幂次方
      * The hash table data.
      */
     private transient Entry<?,?>[] table;
 
     /**
+     * 哈希表table数组中存储元素的个数
      * The total number of entries in the hash table.
      */
     private transient int count;
 
     /**
+     * 扩容的阈值，如果数组table中存储的元素个数大于threshold，则扩大数组table的大小
      * The table is rehashed when its size exceeds this threshold.  (The
      * value of this field is (int)(capacity * loadFactor).)
      *
@@ -151,6 +162,7 @@ public class Hashtable<K,V>
     private int threshold;
 
     /**
+     * 负载因子，默认0.75f，扩容阈值threshold的值等于loadFactor与数组table的容量的乘积
      * The load factor for the hashtable.
      *
      * @serial
@@ -173,8 +185,8 @@ public class Hashtable<K,V>
      * Constructs a new, empty hashtable with the specified initial
      * capacity and the specified load factor.
      *
-     * @param      initialCapacity   the initial capacity of the hashtable.
-     * @param      loadFactor        the load factor of the hashtable.
+     * @param      initialCapacity   the initial capacity of the hashtable.初始容量默认11
+     * @param      loadFactor        the load factor of the hashtable. 负载因子，默认是0.75f
      * @exception  IllegalArgumentException  if the initial capacity is less
      *             than zero, or if the load factor is nonpositive.
      */
@@ -189,6 +201,7 @@ public class Hashtable<K,V>
             initialCapacity = 1;
         this.loadFactor = loadFactor;
         table = new Entry<?,?>[initialCapacity];
+        // 扩容阈值，取 initialCapacity * factory，MAX_ARRAY_SIZE之中的较小值
         threshold = (int)Math.min(initialCapacity * loadFactor, MAX_ARRAY_SIZE + 1);
     }
 
@@ -361,13 +374,17 @@ public class Hashtable<K,V>
     @SuppressWarnings("unchecked")
     public synchronized V get(Object key) {
         Entry<?,?> tab[] = table;
+        // 计算index下标
         int hash = key.hashCode();
         int index = (hash & 0x7FFFFFFF) % tab.length;
+        // 遍历entry链表
         for (Entry<?,?> e = tab[index] ; e != null ; e = e.next) {
+            // 如果key相等，返回
             if ((e.hash == hash) && e.key.equals(key)) {
                 return (V)e.value;
             }
         }
+        // 没有找打返回null
         return null;
     }
 
@@ -380,6 +397,7 @@ public class Hashtable<K,V>
     private static final int MAX_ARRAY_SIZE = Integer.MAX_VALUE - 8;
 
     /**
+     * 重新散列
      * Increases the capacity of and internally reorganizes this
      * hashtable, in order to accommodate and access its entries more
      * efficiently.  This method is called automatically when the
@@ -388,21 +406,28 @@ public class Hashtable<K,V>
      */
     @SuppressWarnings("unchecked")
     protected void rehash() {
+        // 原table长度
         int oldCapacity = table.length;
+        // 原table副本
         Entry<?,?>[] oldMap = table;
 
         // overflow-conscious code
+        // 新的容量为原容量 * 2 + 1
         int newCapacity = (oldCapacity << 1) + 1;
+        // 计算得到的新容量大于最大容量，如果原容量已经是最大容量，继续使用原容量，否则将新容量设置为原容量
         if (newCapacity - MAX_ARRAY_SIZE > 0) {
             if (oldCapacity == MAX_ARRAY_SIZE)
                 // Keep running with MAX_ARRAY_SIZE buckets
                 return;
             newCapacity = MAX_ARRAY_SIZE;
         }
+        // 新建一个哈希表
         Entry<?,?>[] newMap = new Entry<?,?>[newCapacity];
 
         modCount++;
+        // 根据新的容量重新计算阈值
         threshold = (int)Math.min(newCapacity * loadFactor, MAX_ARRAY_SIZE + 1);
+        // 将原hash表指向新建到的hash表
         table = newMap;
 
         for (int i = oldCapacity ; i-- > 0 ;) {
@@ -410,6 +435,7 @@ public class Hashtable<K,V>
                 Entry<K,V> e = old;
                 old = old.next;
 
+                // 重新计算在新hash表中的index
                 int index = (e.hash & 0x7FFFFFFF) % newCapacity;
                 e.next = (Entry<K,V>)newMap[index];
                 newMap[index] = e;
@@ -417,14 +443,23 @@ public class Hashtable<K,V>
         }
     }
 
+    /**
+     * 添加一个元素
+     * @param hash key的hash值
+     * @param key
+     * @param value
+     * @param index 计算得出的在table中位置
+     */
     private void addEntry(int hash, K key, V value, int index) {
         modCount++;
 
         Entry<?,?> tab[] = table;
+        // 如果当前元素数量达到阈值，进行rehash
         if (count >= threshold) {
             // Rehash the table if the threshold is exceeded
             rehash();
 
+            // rehash之后，重新计算hash、index
             tab = table;
             hash = key.hashCode();
             index = (hash & 0x7FFFFFFF) % tab.length;
@@ -432,12 +467,26 @@ public class Hashtable<K,V>
 
         // Creates the new entry.
         @SuppressWarnings("unchecked")
+        // 获取到在index位置的entry
         Entry<K,V> e = (Entry<K,V>) tab[index];
+        // 将新建元素设置为table[index]上的第一个元素
         tab[index] = new Entry<>(hash, key, value, e);
         count++;
     }
 
     /**
+     * 添加一个元素
+     * 1.根据key计算出hashcode
+     * 2.根据hashcode找到元素即将要存储的位置index，
+     * 3.如果位置index已经有元素链表，则在此链表中，寻找是否有key已经存在，
+     * 4.如果key已经存在，更新value，如果不存在，则将添加到链表中
+     *
+     * 在HashMap中，null可以作为键，这样的键只有一个，可以有一个或者多个键所对应的值为null，
+     * 在hashtable中键值都不能为null
+     *
+     * 在hashtable中所有的方法都是使用synchronized关键字进行了同步，
+     * 而HashMap中的方法在缺省的情况下是非同步的。在多线程并发的环境下，
+     * 可以直接使用Hashtable，但是要使用HashMap需要进行同步
      * Maps the specified <code>key</code> to the specified
      * <code>value</code> in this hashtable. Neither the key nor the
      * value can be <code>null</code>. <p>
@@ -456,16 +505,20 @@ public class Hashtable<K,V>
      */
     public synchronized V put(K key, V value) {
         // Make sure the value is not null
+        // 如果value为空，抛出空指针
         if (value == null) {
             throw new NullPointerException();
         }
 
         // Makes sure the key is not already in the hashtable.
         Entry<?,?> tab[] = table;
+        // 对key进行hash，然后根据hash算出在table中的下标
         int hash = key.hashCode();
         int index = (hash & 0x7FFFFFFF) % tab.length;
         @SuppressWarnings("unchecked")
+        // 利用下标获取到entry
         Entry<K,V> entry = (Entry<K,V>)tab[index];
+        // 如果entry不为空，尝试查找key相同的元素，如果存在。替换其value值为新值，返回旧值
         for(; entry != null ; entry = entry.next) {
             if ((entry.hash == hash) && entry.key.equals(key)) {
                 V old = entry.value;
@@ -474,6 +527,7 @@ public class Hashtable<K,V>
             }
         }
 
+        // 下标下不存在该hash(key)，或者链表中国没有key元素
         addEntry(hash, key, value, index);
         return null;
     }
